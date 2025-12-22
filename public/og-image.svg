@@ -1,0 +1,53 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1200" height="630" fill="#0a0a0b"/>
+
+  <!-- Grid pattern -->
+  <defs>
+    <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
+      <path d="M 60 0 L 0 0 0 60" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="1"/>
+    </pattern>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:rgba(34,211,238,0.15)"/>
+      <stop offset="100%" style="stop-color:rgba(244,114,182,0.1)"/>
+    </linearGradient>
+    <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#22d3ee"/>
+      <stop offset="100%" style="stop-color:#f472b6"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bgGrad)"/>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+
+  <!-- Floating orbs -->
+  <circle cx="150" cy="100" r="200" fill="#22d3ee" opacity="0.1" filter="blur(80px)"/>
+  <circle cx="1050" cy="530" r="150" fill="#f472b6" opacity="0.1" filter="blur(60px)"/>
+
+  <!-- Logo icon (scaled up) -->
+  <g transform="translate(540, 180)">
+    <rect x="0" y="0" width="120" height="120" rx="24" fill="url(#logoGrad)"/>
+    <!-- Left bracket -->
+    <path d="M35 30L10 60L35 90" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="miter" fill="none"/>
+    <!-- Right bracket -->
+    <path d="M85 30L110 60L85 90" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="miter" fill="none"/>
+    <!-- Center dot -->
+    <circle cx="60" cy="60" r="10" fill="#22d3ee"/>
+    <!-- Left arc -->
+    <path d="M47 52C44 55 42 57 42 60C42 63 44 65 47 68" stroke="#22d3ee" stroke-width="6" stroke-linecap="round" fill="none" opacity="0.8"/>
+    <!-- Right arc -->
+    <path d="M73 52C76 55 78 57 78 60C78 63 76 65 73 68" stroke="#22d3ee" stroke-width="6" stroke-linecap="round" fill="none" opacity="0.8"/>
+  </g>
+
+  <!-- Brand name -->
+  <text x="600" y="370" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="72" font-weight="700" fill="white">RTCDebug</text>
+
+  <!-- Tagline -->
+  <text x="600" y="440" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="32" fill="#a1a1aa">Stop guessing why calls fail</text>
+
+  <!-- Subtitle -->
+  <text x="600" y="500" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="24" fill="#71717a">WebRTC diagnostics that actually tell you what went wrong</text>
+
+  <!-- Bottom accent line -->
+  <rect x="450" y="560" width="300" height="4" rx="2" fill="url(#logoGrad)"/>
+</svg>
