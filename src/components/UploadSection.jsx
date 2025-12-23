@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import pako from 'pako'
 import { sampleDump } from '../utils/sampleData'
 
 function UploadSection({ onAnalyze, onReset, error, isLoading, hasResults }) {
@@ -48,10 +49,19 @@ function UploadSection({ onAnalyze, onReset, error, isLoading, hasResults }) {
   const handleAnalyze = async () => {
     let data
     if (file) {
-      const text = await file.text()
       try {
+        let text
+        // Check if file is gzipped
+        if (file.name.endsWith('.gz')) {
+          const arrayBuffer = await file.arrayBuffer()
+          const decompressed = pako.ungzip(new Uint8Array(arrayBuffer), { to: 'string' })
+          text = decompressed
+        } else {
+          text = await file.text()
+        }
         data = JSON.parse(text)
-      } catch {
+      } catch (err) {
+        console.error('Failed to parse file:', err)
         onAnalyze(null)
         return
       }
@@ -115,7 +125,7 @@ function UploadSection({ onAnalyze, onReset, error, isLoading, hasResults }) {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".json,.txt"
+          accept=".json,.txt,.gz"
           onChange={handleFileSelect}
           style={{ display: 'none' }}
         />
@@ -127,7 +137,7 @@ function UploadSection({ onAnalyze, onReset, error, isLoading, hasResults }) {
         </svg>
 
         <h3>Drop your webrtc-internals dump here</h3>
-        <p>or click to browse files (.json, .txt)</p>
+        <p>or click to browse files (.json, .txt, .gz)</p>
 
         {file && (
           <div className="file-info" onClick={(e) => e.stopPropagation()}>

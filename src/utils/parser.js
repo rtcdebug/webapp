@@ -46,6 +46,7 @@ function parseSinglePeerConnection(pcId, pcData) {
   const mediaStats = extractMediaStats(stats, timestamps)
   const summary = calculateSummary(stats, mediaStats, selectedCandidatePair, timestamps)
   const { codecs, tracks } = extractCodecsAndTracks(stats)
+  const connectionTimings = calculateConnectionTimings(connectionEvents)
 
   // Determine if this is publisher or subscriber based on track directions
   const hasOutbound = Object.values(stats).some(ts => ts[0]?.type === 'outbound-rtp')
@@ -60,6 +61,7 @@ function parseSinglePeerConnection(pcId, pcData) {
     connectionType,
     summary,
     connectionEvents,
+    connectionTimings,
     localCandidates,
     remoteCandidates,
     selectedCandidatePair,
@@ -67,8 +69,52 @@ function parseSinglePeerConnection(pcId, pcData) {
     codecs,
     tracks,
     url: pcData.url || 'Unknown',
-    rtcConfiguration: pcData.rtcConfiguration || null
+    // Raw data for advanced visualizations
+    rawStats: stats,
+    updateLog: pcData.updateLog || []
   }
+}
+
+/**
+ * Calculate ICE and DTLS connection timings from events
+ */
+function calculateConnectionTimings(events) {
+  const timings = {
+    iceConnectionTime: null,
+    dtlsConnectionTime: null,
+    firstEventTime: null,
+    iceConnectedTime: null,
+    dtlsConnectedTime: null
+  }
+
+  // Find the first event time as start time
+  const startTime = events.length > 0 ? events[0].time : null
+  if (!startTime) return timings
+
+  timings.firstEventTime = startTime
+
+  // Find when ICE reached connected/completed state
+  const iceConnectedEvent = events.find(e =>
+    e.type?.toLowerCase().includes('iceconnectionstate') &&
+    (e.value === 'connected' || e.value === 'completed')
+  )
+  if (iceConnectedEvent) {
+    timings.iceConnectedTime = iceConnectedEvent.time
+    timings.iceConnectionTime = iceConnectedEvent.time - startTime
+  }
+
+  // Find when DTLS/connection reached connected state
+  const dtlsConnectedEvent = events.find(e =>
+    e.type?.toLowerCase().includes('connectionstate') &&
+    !e.type?.toLowerCase().includes('ice') &&
+    e.value === 'connected'
+  )
+  if (dtlsConnectedEvent) {
+    timings.dtlsConnectedTime = dtlsConnectedEvent.time
+    timings.dtlsConnectionTime = dtlsConnectedEvent.time - startTime
+  }
+
+  return timings
 }
 
 /**
@@ -77,34 +123,77 @@ function parseSinglePeerConnection(pcId, pcData) {
 function extractCodecsAndTracks(stats) {
   const codecs = []
   const tracks = []
-  const seenCodecs = new Set()
+  const codecMap = new Map() // codecId -> codec info
+  const codecDirections = new Map() // codecId -> Set of directions
 
+  // First pass: collect all codecs and track codec usage
   Object.entries(stats).forEach(([statId, timeSeries]) => {
     if (!timeSeries || timeSeries.length === 0) return
     const latest = timeSeries[timeSeries.length - 1]
 
-    // Extract codecs
+    // Collect codecs
     if (latest.type === 'codec') {
-      const codecKey = `${latest.mimeType}-${latest.clockRate}`
-      if (!seenCodecs.has(codecKey)) {
-        seenCodecs.add(codecKey)
-        codecs.push({
-          id: statId,
-          mimeType: latest.mimeType,
-          clockRate: latest.clockRate,
-          channels: latest.channels,
-          sdpFmtpLine: latest.sdpFmtpLine
-        })
-      }
+      codecMap.set(statId, {
+        id: statId,
+        mimeType: latest.mimeType,
+        clockRate: latest.clockRate,
+        channels: latest.channels,
+        sdpFmtpLine: latest.sdpFmtpLine
+      })
     }
+
+    // Track which codecs are used by outbound streams
+    if (latest.type === 'outbound-rtp' && latest.codecId) {
+      if (!codecDirections.has(latest.codecId)) {
+        codecDirections.set(latest.codecId, new Set())
+      }
+      codecDirections.get(latest.codecId).add('send')
+    }
+
+    // Track which codecs are used by inbound streams
+    if (latest.type === 'inbound-rtp' && latest.codecId) {
+      if (!codecDirections.has(latest.codecId)) {
+        codecDirections.set(latest.codecId, new Set())
+      }
+      codecDirections.get(latest.codecId).add('recv')
+    }
+  })
+
+  // Build codecs with direction info
+  const seenCodecs = new Set()
+  codecMap.forEach((codec, codecId) => {
+    const codecKey = `${codec.mimeType}-${codec.clockRate}`
+    const directions = codecDirections.get(codecId)
+    const direction = directions
+      ? (directions.has('send') && directions.has('recv') ? 'both'
+        : directions.has('send') ? 'send' : 'recv')
+      : null
+
+    // Dedupe by mimeType+clockRate+direction
+    const uniqueKey = `${codecKey}-${direction}`
+    if (!seenCodecs.has(uniqueKey)) {
+      seenCodecs.add(uniqueKey)
+      codecs.push({
+        ...codec,
+        direction
+      })
+    }
+  })
+
+  // Second pass: extract tracks
+  Object.entries(stats).forEach(([statId, timeSeries]) => {
+    if (!timeSeries || timeSeries.length === 0) return
+    const latest = timeSeries[timeSeries.length - 1]
 
     // Extract outbound tracks with simulcast info
     if (latest.type === 'outbound-rtp') {
+      const codec = latest.codecId ? codecMap.get(latest.codecId) : null
       tracks.push({
         id: statId,
         direction: 'outbound',
         kind: latest.kind,
         rid: latest.rid,
+        codec: codec?.mimeType?.split('/')[1] || null,
         frameWidth: latest.frameWidth,
         frameHeight: latest.frameHeight,
         framesPerSecond: latest.framesPerSecond,
@@ -118,10 +207,12 @@ function extractCodecsAndTracks(stats) {
 
     // Extract inbound tracks
     if (latest.type === 'inbound-rtp') {
+      const codec = latest.codecId ? codecMap.get(latest.codecId) : null
       tracks.push({
         id: statId,
         direction: 'inbound',
         kind: latest.kind,
+        codec: codec?.mimeType?.split('/')[1] || null,
         frameWidth: latest.frameWidth,
         frameHeight: latest.frameHeight,
         framesPerSecond: latest.framesPerSecond,
@@ -241,33 +332,106 @@ function parseUpdateLog(updateLog) {
   updateLog.forEach(entry => {
     if (!entry) return
 
-    const { time, type, value } = entry
+    // Support both 'time' and 'timestamp' property names
+    const { time, timestamp, type, value } = entry
+    const parsedTime = parseTime(timestamp ?? time)
+
+    // Skip if time couldn't be parsed
+    if (parsedTime == null || isNaN(parsedTime)) return
+
+    const typeLower = type?.toLowerCase() || ''
+    const cleanValue = cleanEventValue(value)
 
     // Parse ICE and signaling state changes
-    if (type === 'iceConnectionStateChange' ||
-        type === 'iceGatheringStateChange' ||
-        type === 'signalingStateChange' ||
-        type === 'connectionStateChange') {
+    if (typeLower.includes('iceconnectionstatechange') ||
+        typeLower.includes('icegatheringstatechange') ||
+        typeLower.includes('signalingstatechange') ||
+        (typeLower.includes('connectionstatechange') && !typeLower.includes('ice'))) {
       events.push({
-        timestamp: typeof time === 'string' ? new Date(time).getTime() : parseFloat(time),
-        type: type.replace('Change', ''),
-        value: value,
+        time: parsedTime,
+        type: type.replace(/Change.*$/i, '').replace(/^on/i, ''),
+        value: cleanValue,
         category: getEventCategory(type)
       })
     }
 
     // Parse ICE candidate events
-    if (type === 'addIceCandidate' || type === 'onicecandidate') {
+    if (typeLower.includes('addicecandidate') || typeLower === 'onicecandidate') {
       events.push({
-        timestamp: typeof time === 'string' ? new Date(time).getTime() : parseFloat(time),
+        time: parsedTime,
         type: 'iceCandidate',
-        value: value,
+        value: cleanValue,
         category: 'ice'
       })
     }
   })
 
-  return events.sort((a, b) => a.timestamp - b.timestamp)
+  return events.sort((a, b) => a.time - b.time)
+}
+
+/**
+ * Clean up event value - remove quotes, parse JSON if needed
+ */
+function cleanEventValue(value) {
+  if (value == null) return null
+
+  // If it's already a clean string, return it
+  if (typeof value === 'string') {
+    // Remove surrounding quotes if present
+    let cleaned = value.trim()
+    if ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+        (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+      cleaned = cleaned.slice(1, -1)
+    }
+
+    // Try to parse as JSON in case it's a stringified value
+    try {
+      const parsed = JSON.parse(value)
+      if (typeof parsed === 'string') return parsed
+      if (typeof parsed === 'object' && parsed !== null) {
+        // For SDP objects, return the type
+        return parsed.type || parsed.state || JSON.stringify(parsed)
+      }
+      return String(parsed)
+    } catch {
+      return cleaned
+    }
+  }
+
+  // If it's an object, extract relevant fields
+  if (typeof value === 'object') {
+    return value.type || value.state || JSON.stringify(value)
+  }
+
+  return String(value)
+}
+
+/**
+ * Parse time from various formats used in webrtc-internals dumps
+ */
+function parseTime(time) {
+  if (time == null) return null
+
+  // Already a valid number
+  if (typeof time === 'number' && isFinite(time)) {
+    return time
+  }
+
+  if (typeof time === 'string') {
+    // Try parsing as a number first (Unix timestamp as string)
+    const asNumber = parseFloat(time)
+    if (!isNaN(asNumber) && isFinite(asNumber)) {
+      return asNumber
+    }
+
+    // Try parsing as ISO date string
+    const asDate = new Date(time).getTime()
+    if (!isNaN(asDate)) {
+      return asDate
+    }
+  }
+
+  return null
 }
 
 function getEventCategory(type) {
@@ -337,16 +501,47 @@ function extractMediaStats(stats, timestamps) {
   const rtt = []
   const jitter = []
   const video = []
+  const videoOut = []  // Outbound video (what we send)
+  const videoIn = []   // Inbound video (what we receive)
   const audio = []
+  const audioIn = []   // Inbound audio stats
+  const audioOut = []  // Outbound audio stats
   const bitrate = []
   const qualityLimitation = []
   const videoEvents = []
   const recovery = []
+  const encoderChanges = []
+  const decoderChanges = []
+
+  // Track encoder/decoder implementations over time
+  let lastEncoder = null
+  let lastDecoder = null
+
+  // Track previous audio stats for delta calculations
+  let prevAudioPacketsReceived = 0
+  let prevAudioPacketsSent = 0
+  let prevConcealedSamples = 0
+  let prevTotalSamplesReceived = 0
 
   // Find all outbound-rtp, inbound-rtp, and candidate-pair stats
   const outboundRtp = Object.values(stats).filter(ts => ts[0]?.type === 'outbound-rtp')
   const inboundRtp = Object.values(stats).filter(ts => ts[0]?.type === 'inbound-rtp')
   const candidatePairs = Object.values(stats).filter(ts => ts[0]?.type === 'candidate-pair')
+
+  // Detect simulcast: multiple outbound video streams with different RIDs
+  const outboundVideoStreams = outboundRtp.filter(ts => ts[0]?.kind === 'video')
+  const rids = [...new Set(outboundVideoStreams.map(ts => ts[0]?.rid).filter(Boolean))]
+  const isSimulcast = rids.length > 1
+
+  // Per-RID video tracking for simulcast
+  const simulcastVideo = {}
+  const simulcastPrevBytes = {}
+  if (isSimulcast) {
+    rids.forEach(rid => {
+      simulcastVideo[rid] = []
+      simulcastPrevBytes[rid] = 0
+    })
+  }
 
   // Get the sample count from the first available time series
   const sampleCount = timestamps.length ||
@@ -375,10 +570,28 @@ function extractMediaStats(stats, timestamps) {
     let totalBytesSent = 0
     let totalBytesReceived = 0
     let currentJitter = null
+    // Outbound video stats
+    let outFrameHeight = null
+    let outFrameWidth = null
+    let outFps = null
+    // Inbound video stats
+    let inFrameHeight = null
+    let inFrameWidth = null
+    let inFps = null
+    // Legacy combined (for backwards compatibility)
     let frameHeight = null
     let frameWidth = null
     let fps = null
     let audioLevel = null
+    // Audio stats
+    let audioJitter = null
+    let audioConcealedSamples = 0
+    let audioTotalSamplesReceived = 0
+    let audioPacketsReceived = 0
+    let audioPacketsSent = 0
+    let audioBytesSent = 0
+    let jitterBufferDelay = null
+    let jitterBufferEmittedCount = null
     let qualityReason = 'none'
     let nackCount = 0
     let pliCount = 0
@@ -396,13 +609,52 @@ function extractMediaStats(stats, timestamps) {
         pliCount += point.pliCount || 0
         firCount += point.firCount || 0
         if (point.kind === 'video') {
-          frameHeight = point.frameHeight || frameHeight
-          frameWidth = point.frameWidth || frameWidth
-          fps = point.framesPerSecond || fps
+          // Track outbound video stats (use highest resolution layer)
+          if (!outFrameHeight || (point.frameHeight && point.frameHeight > outFrameHeight)) {
+            outFrameHeight = point.frameHeight
+            outFrameWidth = point.frameWidth
+          }
+          if (!outFps || (point.framesPerSecond && point.framesPerSecond > outFps)) {
+            outFps = point.framesPerSecond
+          }
+          // Legacy combined (for backwards compatibility)
+          if (!frameHeight || (point.frameHeight && point.frameHeight > frameHeight)) {
+            frameHeight = point.frameHeight
+            frameWidth = point.frameWidth
+          }
+          if (!fps || (point.framesPerSecond && point.framesPerSecond > fps)) {
+            fps = point.framesPerSecond
+          }
           // Track quality limitation - prioritize non-none values
           if (point.qualityLimitationReason && point.qualityLimitationReason !== 'none') {
             qualityReason = point.qualityLimitationReason
           }
+          // Track encoder implementation changes
+          if (point.encoderImplementation && point.encoderImplementation !== lastEncoder) {
+            encoderChanges.push({ time, encoder: point.encoderImplementation, scalabilityMode: point.scalabilityMode })
+            lastEncoder = point.encoderImplementation
+          }
+          // Track per-RID data for simulcast
+          if (isSimulcast && point.rid && simulcastVideo[point.rid]) {
+            const prevBytes = simulcastPrevBytes[point.rid] || 0
+            const bytes = point.bytesSent || 0
+            const bytesDelta = bytes - prevBytes
+            const ridBitrate = bytesDelta > 0 && interval > 0 ? (bytesDelta * 8) / interval / 1000 : 0
+            simulcastPrevBytes[point.rid] = bytes
+
+            simulcastVideo[point.rid].push({
+              time,
+              height: point.frameHeight,
+              fps: point.framesPerSecond,
+              bitrate: ridBitrate,
+              qualityLimitationReason: point.qualityLimitationReason || 'none'
+            })
+          }
+        }
+        // Track outbound audio stats
+        if (point.kind === 'audio') {
+          audioPacketsSent += point.packetsSent || 0
+          audioBytesSent += point.bytesSent || 0
         }
       }
     })
@@ -420,8 +672,44 @@ function extractMediaStats(stats, timestamps) {
           audioLevel = point.audioLevel
         }
         if (point.kind === 'video') {
+          // Track inbound video stats
+          if (!inFrameHeight || (point.frameHeight && point.frameHeight > inFrameHeight)) {
+            inFrameHeight = point.frameHeight
+            inFrameWidth = point.frameWidth
+          }
+          if (!inFps || (point.framesPerSecond && point.framesPerSecond > inFps)) {
+            inFps = point.framesPerSecond
+          }
+          // Legacy: fallback for combined if no outbound
+          if (!frameHeight && point.frameHeight) {
+            frameHeight = point.frameHeight
+            frameWidth = point.frameWidth
+          }
+          if (!fps && point.framesPerSecond) {
+            fps = point.framesPerSecond
+          }
           freezeCount += point.freezeCount || 0
           framesDropped += point.framesDropped || 0
+          // Track decoder implementation changes
+          if (point.decoderImplementation && point.decoderImplementation !== lastDecoder) {
+            decoderChanges.push({ time, decoder: point.decoderImplementation })
+            lastDecoder = point.decoderImplementation
+          }
+        }
+        // Track inbound audio stats
+        if (point.kind === 'audio') {
+          audioPacketsReceived += point.packetsReceived || 0
+          if (point.jitter !== undefined) {
+            audioJitter = point.jitter
+          }
+          audioConcealedSamples = point.concealedSamples || 0
+          audioTotalSamplesReceived = point.totalSamplesReceived || 0
+          if (point.jitterBufferDelay !== undefined) {
+            jitterBufferDelay = point.jitterBufferDelay
+          }
+          if (point.jitterBufferEmittedCount !== undefined) {
+            jitterBufferEmittedCount = point.jitterBufferEmittedCount
+          }
         }
       }
     })
@@ -460,9 +748,9 @@ function extractMediaStats(stats, timestamps) {
         : 0
       packetLoss.push({ time, loss: Math.max(0, Math.min(100, lossPercent)) })
 
-      // Bitrate in kbps
-      const sendBitrate = interval > 0 ? (bytesSentDelta * 8) / interval / 1000 : 0
-      const recvBitrate = interval > 0 ? (bytesReceivedDelta * 8) / interval / 1000 : 0
+      // Bitrate in kbps (ensure non-negative - counters can reset)
+      const sendBitrate = interval > 0 && bytesSentDelta > 0 ? (bytesSentDelta * 8) / interval / 1000 : 0
+      const recvBitrate = interval > 0 && bytesReceivedDelta > 0 ? (bytesReceivedDelta * 8) / interval / 1000 : 0
       bitrate.push({
         time,
         sendBitrate: Math.round(sendBitrate),
@@ -497,6 +785,27 @@ function extractMediaStats(stats, timestamps) {
       jitter.push({ time, jitter: currentJitter * 1000 }) // Convert to ms
     }
 
+    // Outbound video (what we send)
+    if (outFrameHeight || outFps) {
+      videoOut.push({
+        time,
+        resolution: outFrameHeight ? `${outFrameWidth}x${outFrameHeight}` : null,
+        height: outFrameHeight,
+        fps: outFps
+      })
+    }
+
+    // Inbound video (what we receive)
+    if (inFrameHeight || inFps) {
+      videoIn.push({
+        time,
+        resolution: inFrameHeight ? `${inFrameWidth}x${inFrameHeight}` : null,
+        height: inFrameHeight,
+        fps: inFps
+      })
+    }
+
+    // Legacy combined video (for backwards compatibility)
     if (frameHeight || fps) {
       video.push({
         time,
@@ -510,6 +819,36 @@ function extractMediaStats(stats, timestamps) {
       audio.push({ time, level: audioLevel, packets: receivedDelta })
     }
 
+    // Inbound audio stats
+    const concealedDelta = audioConcealedSamples - prevConcealedSamples
+    const samplesDelta = audioTotalSamplesReceived - prevTotalSamplesReceived
+    const concealmentPercent = samplesDelta > 0 ? (concealedDelta / samplesDelta) * 100 : 0
+    const jitterBufferMs = jitterBufferEmittedCount > 0 && jitterBufferDelay !== null
+      ? (jitterBufferDelay / jitterBufferEmittedCount) * 1000
+      : null
+
+    if (audioPacketsReceived > 0 || audioJitter !== null || audioLevel !== null) {
+      audioIn.push({
+        time,
+        level: audioLevel,
+        jitter: audioJitter !== null ? audioJitter * 1000 : null, // Convert to ms
+        concealmentPercent: concealmentPercent,
+        jitterBufferMs: jitterBufferMs,
+        packetsReceived: audioPacketsReceived - prevAudioPacketsReceived
+      })
+    }
+
+    // Outbound audio stats
+    if (audioPacketsSent > 0) {
+      const audioBytesDelta = audioBytesSent - prevAudioPacketsSent
+      const audioBitrate = audioBytesDelta > 0 && interval > 0 ? (audioBytesDelta * 8) / interval / 1000 : 0
+      audioOut.push({
+        time,
+        bitrate: audioBitrate,
+        packetsSent: audioPacketsSent - prevAudioPacketsSent
+      })
+    }
+
     prevTotalSent = totalSent
     prevTotalReceived = totalReceived
     prevTotalLost = totalLost
@@ -520,10 +859,21 @@ function extractMediaStats(stats, timestamps) {
     prevFirCount = firCount
     prevFreezeCount = freezeCount
     prevFramesDropped = framesDropped
+    prevAudioPacketsReceived = audioPacketsReceived
+    prevAudioPacketsSent = audioBytesSent
+    prevConcealedSamples = audioConcealedSamples
+    prevTotalSamplesReceived = audioTotalSamplesReceived
   }
 
   // Build quality limitation segments for timeline visualization
   const limitationSegments = buildLimitationSegments(qualityLimitation)
+
+  // Determine if this is pub/sub (has both directions)
+  const hasVideoOut = videoOut.length > 0
+  const hasVideoIn = videoIn.length > 0
+  const hasAudioOut = audioOut.length > 0
+  const hasAudioIn = audioIn.length > 0
+  const isPubSub = hasVideoOut && hasVideoIn
 
   return {
     packets,
@@ -531,12 +881,27 @@ function extractMediaStats(stats, timestamps) {
     rtt,
     jitter,
     video,
+    videoOut,
+    videoIn,
+    hasVideoOut,
+    hasVideoIn,
+    isPubSub,
     audio,
+    audioIn,
+    audioOut,
+    hasAudioIn,
+    hasAudioOut,
     bitrate,
     qualityLimitation,
     limitationSegments,
     videoEvents,
-    recovery
+    recovery,
+    encoderChanges,
+    decoderChanges,
+    // Simulcast data
+    isSimulcast,
+    simulcastLayers: isSimulcast ? rids : null,
+    simulcastVideo: isSimulcast ? simulcastVideo : null
   }
 }
 

@@ -4,6 +4,9 @@ node_modules/
 # Build output
 dist/
 
+# Submodule dependencies (installed in submodule)
+lib/rtcstats/node_modules/
+
 # Logs
 *.log
 npm-debug.log*

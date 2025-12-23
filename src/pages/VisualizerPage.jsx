@@ -5,12 +5,10 @@ import Footer from '../components/Footer'
 import PrivacyBanner from '../components/PrivacyBanner'
 import UpsellBanner from '../components/UpsellBanner'
 import UploadSection from '../components/UploadSection'
-import SummaryCard from '../components/SummaryCard'
-import ConnectionTimeline from '../components/ConnectionTimeline'
-import ICECandidatesTable from '../components/ICECandidatesTable'
-import MediaStatsCharts from '../components/MediaStatsCharts'
-import CodecInfo from '../components/CodecInfo'
-import RawDataExplorer from '../components/RawDataExplorer'
+import DenseMetricsStrip from '../components/DenseMetricsStrip'
+import ConnectionHealthTimeline from '../components/ConnectionHealthTimeline'
+import ChartGrid from '../components/ChartGrid'
+import DetailTabs from '../components/DetailTabs'
 import { parseAllPeerConnections } from '../utils/parser'
 
 function VisualizerPage() {
@@ -63,7 +61,7 @@ function VisualizerPage() {
       <Header />
       <PrivacyBanner />
 
-      <main className="main-content compact">
+      <main className="main-content">
         <div className="container">
           {!currentPc && (
             <div className="page-title compact">
@@ -81,7 +79,7 @@ function VisualizerPage() {
           />
 
           {allConnections.length > 0 && currentPc && (
-            <div className="results-section fade-in">
+            <div className="dashboard fade-in">
               {/* Peer Connection Selector */}
               {allConnections.length > 1 && (
                 <div className="pc-selector">
@@ -98,22 +96,33 @@ function VisualizerPage() {
                 </div>
               )}
 
-              <SummaryCard data={currentPc} />
+              {/* Dense Metrics Strip */}
+              <DenseMetricsStrip data={currentPc} />
 
-              <div className="grid-2">
-                <ConnectionTimeline events={currentPc.connectionEvents} />
-                <ICECandidatesTable
-                  localCandidates={currentPc.localCandidates}
-                  remoteCandidates={currentPc.remoteCandidates}
-                  selectedPair={currentPc.selectedCandidatePair}
-                />
+              {/* Connection Health Timeline */}
+              <ConnectionHealthTimeline
+                events={currentPc.connectionEvents}
+                qualityLimitation={currentPc.mediaStats?.qualityLimitation}
+                duration={currentPc.summary?.durationMs}
+              />
+
+              {/* Charts Grid */}
+              <ChartGrid stats={currentPc.mediaStats} codecs={currentPc.codecs} />
+
+              {/* Detail Tabs */}
+              <DetailTabs data={currentPc} rawData={rawData} />
+
+              {/* Feedback Link */}
+              <div className="dashboard-feedback">
+                Something missing or broken?{' '}
+                <a
+                  href="https://github.com/rtcdebug/webapp/issues/new"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Report it on GitHub
+                </a>
               </div>
-
-              <CodecInfo codecs={currentPc.codecs} tracks={currentPc.tracks} />
-
-              <MediaStatsCharts stats={currentPc.mediaStats} />
-
-              <RawDataExplorer data={rawData} />
             </div>
           )}
 

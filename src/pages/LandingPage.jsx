@@ -28,16 +28,34 @@ function LandingPage() {
     return () => observer.disconnect()
   }, [])
 
-  const handleHeroSubmit = (e) => {
+  const FORMSPARK_FORM_ID = import.meta.env.VITE_FORMSPARK_FORM_ID
+
+  const handleHeroSubmit = async (e) => {
     e.preventDefault()
-    console.log('Waitlist signup:', heroEmail)
-    setHeroSubmitted(true)
+    try {
+      await fetch(`https://submit-form.com/${FORMSPARK_FORM_ID}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: heroEmail, source: 'hero' })
+      })
+      setHeroSubmitted(true)
+    } catch (err) {
+      console.error('Signup error:', err)
+    }
   }
 
-  const handleCtaSubmit = (e) => {
+  const handleCtaSubmit = async (e) => {
     e.preventDefault()
-    console.log('Waitlist signup:', ctaEmail)
-    setCtaSubmitted(true)
+    try {
+      await fetch(`https://submit-form.com/${FORMSPARK_FORM_ID}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: ctaEmail, source: 'cta' })
+      })
+      setCtaSubmitted(true)
+    } catch (err) {
+      console.error('Signup error:', err)
+    }
   }
 
   return (
