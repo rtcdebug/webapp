@@ -11,6 +11,7 @@ function Footer() {
           <div className="footer-links">
             <Link to="/">Home</Link>
             <Link to="/visualizer">Visualizer</Link>
+            <Link to="/blog">Blog</Link>
             <a href="https://github.com/rtcdebug" target="_blank" rel="noopener">GitHub</a>
           </div>
           <p className="footer-copyright">© {new Date().getFullYear()} RTCDebug</p>

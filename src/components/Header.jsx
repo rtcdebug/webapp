@@ -7,6 +7,7 @@ function Header() {
   const pathname = location.pathname.replace(/\/$/, '') || '/'
   const isLanding = pathname === '/'
   const isVisualizer = pathname === '/visualizer'
+  const isBlog = pathname.startsWith('/blog')
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
@@ -54,6 +55,7 @@ function Header() {
                 <a href={isLanding ? '#pricing' : '/#pricing'} onClick={(e) => scrollToSection(e, 'pricing')}>Pricing</a>
               </>
             )}
+            {!isBlog && <Link to="/blog">Blog</Link>}
             <a href="https://github.com/rtcdebug" target="_blank" rel="noopener">GitHub</a>
             {isLanding && (
               <a

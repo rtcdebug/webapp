@@ -3,6 +3,8 @@ import { Routes, Route } from 'react-router-dom'
 
 const LandingPage = lazy(() => import('./pages/LandingPage'))
 const VisualizerPage = lazy(() => import('./pages/VisualizerPage'))
+const BlogPage = lazy(() => import('./pages/BlogPage'))
+const BlogPostPage = lazy(() => import('./pages/BlogPostPage'))
 
 function Loading() {
   return (
@@ -25,6 +27,8 @@ function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/visualizer" element={<VisualizerPage />} />
+        <Route path="/blog" element={<BlogPage />} />
+        <Route path="/blog/:slug" element={<BlogPostPage />} />
       </Routes>
     </Suspense>
   )
