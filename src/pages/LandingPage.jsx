@@ -194,22 +194,6 @@ function LandingPage() {
         </div>
       </section>
 
-      {/* Pricing Section */}
-      <section className="section pricing" id="pricing">
-        <div className="container">
-          <div className="section-header">
-            <h2 className="section-title">Simple, startup-friendly pricing</h2>
-            <p className="section-subtitle" style={{ margin: '0 auto' }}>Start free, scale as you grow. No sales calls required.</p>
-          </div>
-          <div className="pricing-grid">
-            <PricingCard name="Free" price="$0" desc="For side projects and early development" features={['100 calls/month', 'Basic issue detection', '7-day data retention', 'Community support']} />
-            <PricingCard name="Pro" price="$149" desc="For growing products with real users" features={['10,000 calls/month', 'Full root cause analysis', '90-day data retention', 'Slack + email alerts', 'API access']} featured />
-            <PricingCard name="Team" price="$499" desc="For teams that need scale and support" features={['100,000 calls/month', 'Everything in Pro', '1-year data retention', 'Priority support', 'Custom integrations']} />
-          </div>
-          <p className="pricing-note"><strong>Launching soon</strong> — join the waitlist for early access pricing</p>
-        </div>
-      </section>
-
       {/* CTA Section */}
       <section className="section cta" id="cta" style={{ position: 'relative', overflow: 'hidden' }}>
         <div className="floating-orb" style={{ width: '200px', height: '200px', background: 'var(--accent-cyan)', top: '20%', left: '10%', filter: 'blur(80px)', opacity: 0.3 }}></div>
@@ -421,22 +405,6 @@ function FeatureCard({ icon, title, description }) {
       <div className="feature-icon">{icon}</div>
       <h3>{title}</h3>
       <p>{description}</p>
-    </div>
-  )
-}
-
-// Pricing Card Component
-function PricingCard({ name, price, desc, features, featured }) {
-  return (
-    <div className={`pricing-card ${featured ? 'featured' : ''}`}>
-      <div className="pricing-name">{name}</div>
-      <div className="pricing-price">{price}<span>/mo</span></div>
-      <div className="pricing-desc">{desc}</div>
-      <ul className="pricing-features">
-        {features.map((f, i) => (
-          <li key={i}><CheckIcon /> {f}</li>
-        ))}
-      </ul>
     </div>
   )
 }

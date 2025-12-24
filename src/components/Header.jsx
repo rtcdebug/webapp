@@ -50,10 +50,7 @@ function Header() {
               </>
             )}
             {!isVisualizer && (
-              <>
-                <Link to="/visualizer">Visualizer</Link>
-                <a href={isLanding ? '#pricing' : '/#pricing'} onClick={(e) => scrollToSection(e, 'pricing')}>Pricing</a>
-              </>
+              <Link to="/visualizer">Visualizer</Link>
             )}
             {!isBlog && <Link to="/blog">Blog</Link>}
             <a href="https://github.com/rtcdebug" target="_blank" rel="noopener">GitHub</a>
