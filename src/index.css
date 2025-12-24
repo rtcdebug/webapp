@@ -1607,6 +1607,7 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 40px;
+  align-items: start;
 }
 
 .step {
@@ -1707,15 +1708,15 @@ body {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 24px;
+  padding: 16px;
 }
 
 .report-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -1742,18 +1743,18 @@ body {
 
 .report-issue {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   padding: 16px;
   background: rgba(239, 68, 68, 0.1);
   border-left: 3px solid #ef4444;
   border-radius: 0 8px 8px 0;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .report-recommendation {
   display: flex;
-  gap: 16px;
-  padding: 16px;
+  gap: 12px;
+  padding: 12px;
   background: var(--accent-cyan-dim);
   border-left: 3px solid var(--accent-cyan);
   border-radius: 0 8px 8px 0;
@@ -2500,7 +2501,7 @@ body {
 /* Hero Illustration */
 .hero-visual {
   position: absolute;
-  right: 0;
+  right: max(0px, calc(50vw - 700px));
   top: 55%;
   transform: translateY(-50%);
   width: 45%;

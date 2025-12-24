@@ -339,7 +339,7 @@ function Step2() {
       <span className="step-number">2</span>
       <div className="step-content">
         <h3>We collect stats from everyone</h3>
-        <p>Our SDK automatically instruments RTCPeerConnection and collects stats from all participants, correlating timestamps across the call.</p>
+        <p>Our SDK automatically instruments RTCPeerConnection and collects stats from all participants.</p>
         <div className="code-block">
           <div className="code-header">
             <div className="code-dots"><span className="code-dot"></span><span className="code-dot"></span><span className="code-dot"></span></div>
@@ -380,16 +380,7 @@ function Step3() {
             </div>
             <div className="landing-issue-content">
               <h4>High Packet Loss Detected</h4>
-              <p>Participant "user-456" experienced 12% packet loss from 2:34-2:41 PM due to network congestion on their end.</p>
-            </div>
-          </div>
-          <div className="report-recommendation">
-            <div className="rec-icon">
-              <HelpIcon />
-            </div>
-            <div className="rec-content">
-              <h4>Recommendation</h4>
-              <p>Consider implementing adaptive bitrate or prompting users on poor connections to switch to audio-only mode.</p>
+              <p>12% packet loss from 2:34-2:41 PM — network congestion on receiver's end.</p>
             </div>
           </div>
         </div>
